@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['To Do', ' In Progress', 'Done'],// "enum" means it must be one of the exact words.
+        enum: ['To Do', 'In Progress', 'Done'],// "enum" means it must be one of the exact words.
         default: 'To Do'
     },
 
