@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const taskSchema = new mongoose.Schema({
+    user:{
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      ref: 'User' // This tells MongoDB that this field is a reference to the User model (the "VIP wristband" that links tasks to users)
+    },
     title: {
         type: String,
         required: [true, 'Please add a title for the task'],
@@ -14,7 +19,7 @@ const taskSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['To Do', 'In Progress', 'Done'],// "enum" means it must be one of the exact words.
+        enum: ['To Do', 'In Progress', 'Done'],
         default: 'To Do'
     },
 

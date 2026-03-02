@@ -4,7 +4,7 @@ import Task from '../models/Task.js';
 // @route  GET /api/tasks
 const getTasks = async (req, res) => {
     try{
-        const tasks = await Task.find();
+        const tasks = await Task.find({user: req.user.id});
         res.status(200).json({success: true, count :tasks.length, data: tasks});
     }
     catch (error){
@@ -18,6 +18,8 @@ const getTasks = async (req, res) => {
 const createTask = async (req, res) => {
     try {
         // req.body contains the data the user sent us (title, description)
+        req.body.user = req.user.id; // Set the user field to the logged-in user's ID
+        
         const task = await Task.create(req.body); // Tells MongoDB to save it
         
         // 201 means "Created successfully"
@@ -37,6 +39,12 @@ const getTask = async (req, res) => {
         if (!task) {
             return res.status(404).json({ success: false, message: 'Task not found' });
         }
+         // SECURITY CHECK: Make sure the logged-in user owns this task
+        // task.user is a MongoDB ObjectId, so we MUST convert it to a string to compare it!
+        if (task.user.toString() !== req.user.id) {
+            // 403 means "Forbidden" (You are logged in, but not allowed here)
+            return res.status(403).json({ success: false, message: 'Not authorized to view this task' });
+        }
 
         res.status(200).json({ success: true, data: task });
     } catch (error) {
@@ -51,15 +59,21 @@ const updateTask = async (req, res) => {
         // Find by ID and update it with the new data in req.body
         // { new: true } tells Mongoose to return the updated version, not the old one
         // { runValidators: true } forces it to check our blueprint rules again!
-        const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
+        let task = await Task.findById(req.params.id);
 
         if (!task) {
             return res.status(404).json({ success: false, message: 'Task not found' });
         }
 
+        // SECURITY CHECK: Make sure the logged-in user owns this task
+        if (task.user.toString() !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Not authorized to update this task' });
+        }
+
+        task = await Task.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true
+        });
         res.status(200).json({ success: true, data: task });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
@@ -70,12 +84,18 @@ const updateTask = async (req, res) => {
 // @route   DELETE /api/tasks/:id
 const deleteTask = async (req, res) => {
     try {
-        const task = await Task.findByIdAndDelete(req.params.id);
+        const task = await Task.findById(req.params.id);
 
         if (!task) {
             return res.status(404).json({ success: false, message: 'Task not found' });
         }
 
+        // SECURITY CHECK: Make sure the logged-in user owns this task
+        if (task.user.toString() !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Not authorized to delete this task' });
+        }
+
+        await Task.findByIdAndDelete(req.params.id);
         res.status(200).json({ success: true, message: 'Task deleted successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server Error' });
