@@ -2,13 +2,64 @@ import Task from '../models/Task.js';
 
 // @desc   Get all tasks
 // @route  GET /api/tasks
+// @desc    Get ALL tasks (with filtering, sorting, and pagination)
+// @route   GET /api/tasks
 const getTasks = async (req, res) => {
-    try{
-        const tasks = await Task.find({user: req.user.id});
-        res.status(200).json({success: true, count :tasks.length, data: tasks});
-    }
-    catch (error){
-        res.status(500).json({success: false, error: 'Server Error'});
+    try {
+        // STEP 1: FILTERING
+        // We make a copy of the query parameters from the URL (e.g., ?status=Done)
+        // We immediately inject the logged-in user's ID so they can NEVER see someone else's tasks!
+        let queryObj = { ...req.query, user: req.user.id };
+
+        // Some words are reserved for sorting/pagination, not for filtering data.
+        // We must delete them from our filter object before we ask the database.
+        const excludedFields = ['sort', 'page', 'limit'];
+        excludedFields.forEach(el => delete queryObj[el]);
+
+        // Start building the MongoDB search query (Notice there is no 'await' yet!)
+        // We are just setting up the rules.
+        let query = Task.find(queryObj);
+
+        // STEP 2: SORTING
+        if (req.query.sort) {
+            // If the URL has ?sort=priority
+            // Mongoose uses spaces for multiple sorts, so if they pass ?sort=priority,status
+            // we change the comma to a space: "priority status"
+            const sortBy = req.query.sort.split(',').join(' ');
+            query = query.sort(sortBy);
+        } else {
+            // Default sort: '-createdAt' means newest tasks show up first (Descending order)
+            query = query.sort('-createdAt');
+        }
+
+        // STEP 3: PAGINATION
+        // Base 10 parsing. If no page is provided, default to page 1.
+        const page = parseInt(req.query.page, 10) || 1; 
+        // Default to showing 10 tasks per page.
+        const limit = parseInt(req.query.limit, 10) || 10; 
+        // Math to figure out how many tasks to skip. 
+        // Example: Page 3, Limit 10 -> (3 - 1) * 10 = Skip the first 20 tasks!
+        const skip = (page - 1) * limit;
+
+        // Apply pagination rules to our query
+        query = query.skip(skip).limit(limit);
+
+        // STEP 4: EXECUTE THE QUERY
+        // Now that we have added all our rules (filters, sorts, limits), we finally run it!
+        const tasks = await query;
+
+        // Bonus: Send back the total pages data so the frontend can build "Next Page" buttons
+        const totalTasks = await Task.countDocuments(queryObj);
+        const totalPages = Math.ceil(totalTasks / limit);
+
+        res.status(200).json({ 
+            success: true, 
+            count: tasks.length, 
+            pagination: { page, limit, totalPages, totalTasks },
+            data: tasks 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
